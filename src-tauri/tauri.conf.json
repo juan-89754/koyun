@@ -1,0 +1,77 @@
+{
+  "productName": "koyun",
+  "version": "0.1.0",
+  "identifier": "com.benit.koyun",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Koyun",
+        "width": 780,
+        "height": 520,
+        "y": 8,
+        "resizable": false,
+        "decorations": false,
+        "transparent": false,
+        "shadow": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": false,
+        "focus": true
+      },
+      {
+        "label": "island",
+        "title": "Koyun Island",
+        "url": "/island.html",
+        "width": 56,
+        "height": 56,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "visible": false,
+        "shadow": false,
+        "focusable": false
+      },
+      {
+        "label": "wallpaper",
+        "title": "Koyun Wallpaper",
+        "url": "/wallpaper.html",
+        "width": 800,
+        "height": 600,
+        "decorations": false,
+        "transparent": false,
+        "alwaysOnTop": false,
+        "skipTaskbar": true,
+        "resizable": false,
+        "visible": false,
+        "shadow": false,
+        "focusable": false
+      }
+    ],
+    "security": {
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$APPDATA/koyun/fondos/**"]
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}
