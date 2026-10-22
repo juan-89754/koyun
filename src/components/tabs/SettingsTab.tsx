@@ -7,6 +7,7 @@ import {
 } from "../../lib/theme";
 import { acceleratorFromEvent, formatAccelerator } from "../../lib/hotkeys";
 import { useConfigStore } from "../../store/config";
+import { useGameModeStore } from "../../store/gameMode";
 import { NumberInput, Row, Section, Segmented, Toggle } from "../settings/Controls";
 
 const THEME_MODES: readonly { id: ThemeMode; label: string }[] = [
@@ -32,6 +33,7 @@ export function SettingsTab() {
   const systemTheme = useConfigStore((s) => s.systemTheme);
   const hotkeys = useConfigStore((s) => s.hotkeys);
   const patch = useConfigStore((s) => s.patch);
+  const gameMode = useGameModeStore();
   const [capturing, setCapturing] = useState<string | null>(null);
   const [customAccent, setCustomAccent] = useState("#2dd4bf");
 
@@ -65,6 +67,12 @@ export function SettingsTab() {
   useEffect(() => {
     if (capturing) captureRef.current?.focus();
   }, [capturing]);
+
+  useEffect(() => {
+    void gameMode.status();
+    // Solo al montar la pestaña.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (!config) {
     return (
@@ -241,6 +249,50 @@ export function SettingsTab() {
             onChange={(value) => void patch({ video: { always_muted: value } })}
           />
         </Row>
+      </Section>
+
+      <Section title="Modo Juego" description="Prioriza el juego y limita la carga secundaria.">
+        <Row label="Activar Modo Juego" hint="Eleva la prioridad del juego, pausa el vídeo de fondo y los sondeos. Todo se restaura al desactivar o cerrar.">
+          <Toggle
+            label="Activar Modo Juego"
+            checked={gameMode.enabled}
+            onChange={(value) => {
+              if (value) void gameMode.enable();
+              else void gameMode.disable();
+            }}
+          />
+        </Row>
+        <Row
+          label="Objetivo"
+          hint={
+            gameMode.targetExe
+              ? `${gameMode.targetExe}${gameMode.targetPid ? ` (PID ${gameMode.targetPid})` : ""}`
+              : "Sin objetivo: se usará la ventana en primer plano"
+          }
+        >
+          <button
+            className="rounded-md border border-white/10 px-2 py-1 text-xs text-slate-200 hover:bg-white/5 disabled:opacity-50"
+            onClick={() => void gameMode.useForeground()}
+            disabled={gameMode.loading}
+          >
+            Usar ventana en primer plano
+          </button>
+        </Row>
+        <Row label="Limitar escaneo Wi-Fi" hint="Desactiva el escaneo periódico si estaba activo y lo restaura obligatoriamente al salir.">
+          <Toggle
+            label="Limitar escaneo Wi-Fi"
+            checked={gameMode.limitWifi}
+            onChange={(value) => useGameModeStore.setState({ limitWifi: value })}
+          />
+        </Row>
+        <Row label="Seguridad" hint="Sin suspensión de procesos ni prioridad en tiempo real. Solo HIGH_PRIORITY_CLASS del propio juego.">
+          <span className="text-[10px] text-amber-300/80">Sin permisos de administrador</span>
+        </Row>
+        {gameMode.error && (
+          <Row label="Error" hint={gameMode.error}>
+            <span className="text-[10px] text-red-300">Revisar</span>
+          </Row>
+        )}
       </Section>
 
       <Section title="Isla dinámica" description="El pequeño indicador superior.">

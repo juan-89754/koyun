@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { VolumeIcon, VolumeXIcon } from "../icons";
 import { useErrorState } from "../../lib/errors";
+import { useGameModeStore } from "../../store/gameMode";
 
 interface AudioSession {
   pid: number;
@@ -52,7 +53,10 @@ export function MixerTab() {
 
   useEffect(() => {
     void load();
-    const timer = window.setInterval(() => void load(), 2000);
+    const timer = window.setInterval(() => {
+      if (useGameModeStore.getState().enabled) return;
+      void load();
+    }, 2000);
     return () => window.clearInterval(timer);
   }, [load]);
 

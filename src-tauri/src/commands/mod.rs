@@ -2,6 +2,7 @@ pub mod audio;
 pub mod clipboard;
 pub mod config;
 pub mod controls;
+pub mod game_mode;
 pub mod hotkeys;
 pub mod island;
 pub mod log;

@@ -2,6 +2,7 @@ import { useRef } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { TABS, type TabId } from "../lib/tabs";
 import { useUiStore } from "../store/ui";
+import { useGameModeStore } from "../store/gameMode";
 import { ControlsIcon, StatsIcon, ClipboardIcon, WallpaperIcon, PowerIcon, HideIcon } from "./icons";
 import { SlidersHorizontal, Bell, Settings } from "lucide-react";
 
@@ -24,6 +25,7 @@ interface TopBarProps {
 export function TopBar({ onRequestFocusTab, tabIndex }: TopBarProps) {
   const activeTab = useUiStore((s) => s.activeTab);
   const setActiveTab = useUiStore((s) => s.setActiveTab);
+  const gameModeEnabled = useGameModeStore((s) => s.enabled);
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -48,6 +50,11 @@ export function TopBar({ onRequestFocusTab, tabIndex }: TopBarProps) {
       <span data-tauri-drag-region className="mr-2 text-[13px] font-semibold tracking-wide text-white/90">
         Koyun
       </span>
+      {gameModeEnabled && (
+        <span className="mr-2 rounded-md border border-amber-400/60 bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-200">
+          Modo Juego
+        </span>
+      )}
 
       <nav
         role="tablist"

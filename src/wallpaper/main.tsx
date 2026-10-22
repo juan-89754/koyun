@@ -29,9 +29,20 @@ function Wallpaper() {
 
   useEffect(() => {
     void invoke<string | null>("wallpaper_video_state").then(play).catch(() => {});
-    const unlisten = listen<string | null>("wallpaper:video", (event) => play(event.payload));
+    const unlisten1 = listen<string | null>("wallpaper:video", (event) => play(event.payload));
+    const unlisten2 = listen("wallpaper:game-pause", () => {
+      const video = videoRef.current;
+      if (video) video.pause();
+    });
+    const unlisten3 = listen("wallpaper:game-resume", async () => {
+      const video = videoRef.current;
+      if (!video || !video.src) return;
+      try { await video.play(); } catch {}
+    });
     return () => {
-      void unlisten.then((fn) => fn());
+      void unlisten1.then((fn) => fn());
+      void unlisten2.then((fn) => fn());
+      void unlisten3.then((fn) => fn());
     };
   }, []);
 

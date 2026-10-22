@@ -200,6 +200,40 @@ pub fn restore(app: &AppHandle) {
     });
 }
 
+#[tauri::command]
+pub async fn wallpaper_video_pause_game(app: AppHandle) -> Result<(), String> {
+    blocking(move || {
+        if let Some(window) = app.get_webview_window("wallpaper") {
+            let _ = window.emit("wallpaper:game-pause", ());
+        }
+        Ok(())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn wallpaper_video_resume_game(app: AppHandle) -> Result<(), String> {
+    blocking(move || {
+        if let Some(window) = app.get_webview_window("wallpaper") {
+            let _ = window.emit("wallpaper:game-resume", ());
+        }
+        Ok(())
+    })
+    .await
+}
+
+pub fn pause_game(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("wallpaper") {
+        let _ = window.emit("wallpaper:game-pause", ());
+    }
+}
+
+pub fn resume_game(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("wallpaper") {
+        let _ = window.emit("wallpaper:game-resume", ());
+    }
+}
+
 /// Detiene el vídeo al cerrar la aplicación para no dejar la ventana huérfana.
 pub fn shutdown(app: &AppHandle) {
     if CURRENT.lock().unwrap_or_else(|e| e.into_inner()).is_some() {

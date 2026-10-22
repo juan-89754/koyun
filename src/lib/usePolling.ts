@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { useGameModeStore } from "../store/gameMode";
 
 /**
  * Sondeo periódico que:
@@ -20,7 +21,8 @@ export function usePolling(task: () => unknown, intervalMs: number) {
     let busy = false;
 
     const tick = () => {
-      if (busy || document.hidden) return;
+      // En Modo Juego se suspenden los sondeos para liberar CPU.
+      if (busy || document.hidden || useGameModeStore.getState().enabled) return;
       busy = true;
       try {
         void Promise.resolve(taskRef.current()).finally(() => {

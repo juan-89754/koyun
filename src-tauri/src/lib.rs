@@ -18,6 +18,8 @@ pub fn run() {
     let default_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         commands::log::append("PANIC", &info.to_string());
+        // Red de seguridad: nunca dejar prioridades o Wi-Fi alterados.
+        commands::game_mode::force_restore_from_static();
         default_hook(info);
     }));
 
@@ -26,19 +28,23 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         // Alt+F4 (o el botón de cierre) oculta el panel en lugar de terminar
         // la aplicación: la salida real es "Salir" en el icono de la bandeja.
-        .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                let _ = window.hide();
-                VISIBLE.store(false, Ordering::SeqCst);
-            }
-        })
+            .on_window_event(|window, event| {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    // Restaurar estado antes de ocultar (seguro)
+                    commands::game_mode::force_restore_all(window.app_handle());
+                    api.prevent_close();
+                    let _ = window.hide();
+                    VISIBLE.store(false, Ordering::SeqCst);
+                }
+            })
         .setup(|app| {
             use tauri_plugin_dialog::DialogExt;
 
             if let Some(window) = app.get_webview_window("main") {
                 VISIBLE.store(window.is_visible().unwrap_or(false), Ordering::SeqCst);
             }
+
+            commands::game_mode::init(app.handle());
 
             // Carga configuración y registra atajos configurables
             if let Err(err) = commands::config::init(app.handle()) {
@@ -114,7 +120,10 @@ pub fn run() {
                             VISIBLE.store(false, Ordering::SeqCst);
                         }
                     }
-                    "quit" => app.exit(0),
+                    "quit" => {
+                        commands::game_mode::force_restore_all(app);
+                        app.exit(0)
+                    }
                     _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
@@ -228,7 +237,13 @@ pub fn run() {
             commands::log::log_message,
             commands::island::island_toggle_main,
             commands::notification::notification_list,
-            commands::notification::notification_open_settings
+            commands::notification::notification_open_settings,
+            commands::game_mode::game_mode_status,
+            commands::game_mode::game_mode_use_foreground,
+            commands::game_mode::game_mode_enable,
+            commands::game_mode::game_mode_disable,
+            commands::videowallpaper::wallpaper_video_pause_game,
+            commands::videowallpaper::wallpaper_video_resume_game
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

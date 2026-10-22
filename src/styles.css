@@ -200,3 +200,13 @@ input[type="range"] {
   background: var(--koyun-surface-2);
   color: var(--koyun-fg);
 }
+
+/* Modo Juego: reduce animaciones para liberar CPU/GPU. */
+html[data-game-mode="true"] *,
+html[data-game-mode="true"] *::before,
+html[data-game-mode="true"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}

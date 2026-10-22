@@ -3,6 +3,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { TABS, type TabId } from "./lib/tabs";
 import { useUiStore } from "./store/ui";
 import { useConfigStore } from "./store/config";
+import { useGameModeStore } from "./store/gameMode";
 import { TopBar } from "./components/TopBar";
 import { ControlsTab } from "./components/tabs/ControlsTab";
 import { PowerTab } from "./components/tabs/PowerTab";
@@ -40,13 +41,25 @@ function App() {
   const activeTab = useUiStore((s) => s.activeTab);
   const setActiveTab = useUiStore((s) => s.setActiveTab);
   const loadConfig = useConfigStore((s) => s.load);
+  const gameModeEnabled = useGameModeStore((s) => s.enabled);
+  const gameStatus = useGameModeStore((s) => s.status);
   const [tabIndex, setTabIndex] = useState(() =>
     Math.max(0, TABS.findIndex((tab) => tab.id === useUiStore.getState().activeTab)),
   );
 
   useEffect(() => {
     void loadConfig();
-  }, [loadConfig]);
+    void gameStatus();
+  }, [loadConfig, gameStatus]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (gameModeEnabled) {
+      root.setAttribute("data-game-mode", "true");
+    } else {
+      root.removeAttribute("data-game-mode");
+    }
+  }, [gameModeEnabled]);
 
   useEffect(() => {
     const index = TABS.findIndex((tab) => tab.id === activeTab);

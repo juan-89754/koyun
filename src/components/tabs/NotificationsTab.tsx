@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Bell, ExternalLink, RefreshCw } from "lucide-react";
+import { useGameModeStore } from "../../store/gameMode";
 
 interface NotificationItem {
   id: number;
@@ -41,7 +42,10 @@ export default function NotificationsTab() {
 
   useEffect(() => {
     void load();
-    const t = setInterval(load, 8000);
+    const t = setInterval(() => {
+      if (useGameModeStore.getState().enabled) return;
+      void load();
+    }, 8000);
     return () => clearInterval(t);
   }, []);
 
