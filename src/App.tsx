@@ -2,25 +2,35 @@ import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { TABS, type TabId } from "./lib/tabs";
 import { useUiStore } from "./store/ui";
+import { useConfigStore } from "./store/config";
 import { TopBar } from "./components/TopBar";
 import { ControlsTab } from "./components/tabs/ControlsTab";
 import { PowerTab } from "./components/tabs/PowerTab";
 import { StatsTab } from "./components/tabs/StatsTab";
 import { ClipboardTab } from "./components/tabs/ClipboardTab";
 import { WallpaperTab } from "./components/tabs/WallpaperTab";
+import { MixerTab } from "./components/tabs/MixerTab";
+import NotificationsTab from "./components/tabs/NotificationsTab";
+import { SettingsTab } from "./components/tabs/SettingsTab";
 
 function renderTab(tab: TabId) {
   switch (tab) {
     case "controls":
       return <ControlsTab />;
+    case "mixer":
+      return <MixerTab />;
     case "stats":
       return <StatsTab />;
     case "clipboard":
       return <ClipboardTab />;
     case "wallpaper":
       return <WallpaperTab />;
+    case "notifications":
+      return <NotificationsTab />;
     case "power":
       return <PowerTab />;
+    case "settings":
+      return <SettingsTab />;
     default:
       return <ControlsTab />;
   }
@@ -29,9 +39,14 @@ function renderTab(tab: TabId) {
 function App() {
   const activeTab = useUiStore((s) => s.activeTab);
   const setActiveTab = useUiStore((s) => s.setActiveTab);
+  const loadConfig = useConfigStore((s) => s.load);
   const [tabIndex, setTabIndex] = useState(() =>
     Math.max(0, TABS.findIndex((tab) => tab.id === useUiStore.getState().activeTab)),
   );
+
+  useEffect(() => {
+    void loadConfig();
+  }, [loadConfig]);
 
   useEffect(() => {
     const index = TABS.findIndex((tab) => tab.id === activeTab);

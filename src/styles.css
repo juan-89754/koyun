@@ -4,6 +4,133 @@
   --font-sans: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
 }
 
+/* --------------------------------------------------------------------------
+   Tema
+
+   El aspecto se resuelve con variables CSS para poder cambiar entre claro y
+   oscuro, y el color de acento, en caliente (sin recargar la interfaz).
+   `data-theme` y `data-preset` los fija `src/lib/theme.ts`.
+   -------------------------------------------------------------------------- */
+:root {
+  color-scheme: dark;
+
+  /* Texto */
+  --koyun-fg: #f4f4f5;
+  --koyun-fg-muted: #cbd5e1;
+  --koyun-fg-subtle: #a1a1aa;
+
+  /* Superficies */
+  --koyun-surface: #18181b;
+  --koyun-surface-2: #27272a;
+  --koyun-border: #3f3f46;
+
+  /* Acento */
+  --koyun-accent: #2dd4bf;
+  --koyun-accent-fg: #042f2e;
+
+  /* Tintes de estado (los que en modo claro necesitan más contraste) */
+  --koyun-emerald: #6ee7b7;
+  --koyun-emerald-strong: #a7f3d0;
+  --koyun-sky: #7dd3fc;
+  --koyun-sky-strong: #bae6fd;
+  --koyun-violet: #c4b5fd;
+  --koyun-violet-strong: #ddd6fe;
+  --koyun-cyan: #67e8f9;
+  --koyun-cyan-strong: #a5f3fc;
+  --koyun-blue: #93c5fd;
+  --koyun-blue-strong: #bfdbfe;
+  --koyun-red: #fca5a5;
+  --koyun-red-strong: #fecaca;
+  --koyun-amber: #fcd34d;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --koyun-fg: #18181b;
+  --koyun-fg-muted: #475569;
+  --koyun-fg-subtle: #64748b;
+
+  --koyun-surface: #f1f5f9;
+  --koyun-surface-2: #ffffff;
+  --koyun-border: #cbd5e1;
+
+  --koyun-emerald: #047857;
+  --koyun-emerald-strong: #065f46;
+  --koyun-sky: #0369a1;
+  --koyun-sky-strong: #075985;
+  --koyun-violet: #6d28d9;
+  --koyun-violet-strong: #5b21b6;
+  --koyun-cyan: #0e7490;
+  --koyun-cyan-strong: #155e75;
+  --koyun-blue: #1d4ed8;
+  --koyun-blue-strong: #1e40af;
+  --koyun-red: #b91c1c;
+  --koyun-red-strong: #991b1b;
+  --koyun-amber: #b45309;
+}
+
+/* Paletas predefinidas: solo cambian el color de acento. */
+:root[data-preset="midnight"] {
+  --koyun-accent: #60a5fa;
+  --koyun-accent-fg: #0b1e3a;
+}
+
+:root[data-preset="cyberpunk"] {
+  --koyun-accent: #f472b6;
+  --koyun-accent-fg: #3b0620;
+}
+
+:root[data-preset="minimal"] {
+  --koyun-accent: #94a3b8;
+  --koyun-accent-fg: #0f172a;
+}
+
+:root[data-preset="ocean"] {
+  --koyun-accent: #38bdf8;
+  --koyun-accent-fg: #04293d;
+}
+
+:root[data-preset="sunset"] {
+  --koyun-accent: #fb923c;
+  --koyun-accent-fg: #3b1503;
+}
+
+/* --------------------------------------------------------------------------
+   Puente con Tailwind
+
+   `@theme inline` hace que las utilidades usen directamente la variable CSS,
+   de modo que el cambio de tema se ve sin reconstruir nada. Se reasignan los
+   colores que ya usaba la interfaz (`text-white`, `bg-white/5`,
+   `text-slate-200`…) para que respeten el tema activo.
+   -------------------------------------------------------------------------- */
+@theme inline {
+  --color-white: var(--koyun-fg);
+  --color-slate-100: var(--koyun-fg);
+  --color-slate-200: var(--koyun-fg);
+  --color-slate-300: var(--koyun-fg-muted);
+  --color-slate-400: var(--koyun-fg-subtle);
+  --color-zinc-900: var(--koyun-surface-2);
+  --color-zinc-800: var(--koyun-surface);
+
+  --color-accent: var(--koyun-accent);
+  --color-accent-fg: var(--koyun-accent-fg);
+
+  --color-emerald-300: var(--koyun-emerald);
+  --color-emerald-200: var(--koyun-emerald-strong);
+  --color-sky-300: var(--koyun-sky);
+  --color-sky-200: var(--koyun-sky-strong);
+  --color-violet-300: var(--koyun-violet);
+  --color-violet-200: var(--koyun-violet-strong);
+  --color-cyan-300: var(--koyun-cyan);
+  --color-cyan-200: var(--koyun-cyan-strong);
+  --color-blue-300: var(--koyun-blue);
+  --color-blue-200: var(--koyun-blue-strong);
+  --color-red-300: var(--koyun-red);
+  --color-red-200: var(--koyun-red-strong);
+  --color-amber-300: var(--koyun-amber);
+}
+
 html,
 body,
 #root {
@@ -26,7 +153,7 @@ body {
 .panel {
   margin: 0;
   height: 100vh;
-  background: #18181b;
+  background: var(--koyun-surface);
   overflow: hidden;
 }
 
@@ -47,7 +174,7 @@ body {
 
 .koyun-scroll {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+  scrollbar-color: color-mix(in oklab, var(--koyun-fg) 18%, transparent) transparent;
 }
 
 .koyun-scroll::-webkit-scrollbar {
@@ -55,10 +182,21 @@ body {
 }
 
 .koyun-scroll::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.16);
+  background: color-mix(in oklab, var(--koyun-fg) 18%, transparent);
   border-radius: 3px;
 }
 
 .koyun-scroll::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/* Los deslizadores heredan el color de acento. */
+input[type="range"] {
+  accent-color: var(--koyun-accent);
+}
+
+/* En el tema claro los menús <option> necesitan fondo explícito. */
+:root[data-theme="light"] option {
+  background: var(--koyun-surface-2);
+  color: var(--koyun-fg);
 }

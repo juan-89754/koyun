@@ -177,6 +177,11 @@ pub async fn media_action(action: String) -> Result<(), String> {
     blocking(move || media_action_impl(&action)).await
 }
 
+/// Versión síncrona para usar desde atajos globales (sin pasar por el runtime async).
+pub fn media_action_sync(action: &str) -> Result<(), String> {
+    media_action_impl(action)
+}
+
 fn media_action_impl(action: &str) -> Result<(), String> {
     let _com = ComGuard::new();
     let session =

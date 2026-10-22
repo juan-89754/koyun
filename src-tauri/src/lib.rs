@@ -1,6 +1,4 @@
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
-use std::time::{Duration, Instant};
 
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -8,11 +6,9 @@ use tauri::Manager;
 
 mod commands;
 
-/// Estado propio de visibilidad + anti-rebote: evita alternancias erráticas si
-/// se pulsa el atajo justo durante una transición. Es solo un respaldo: la
-/// fuente de verdad es `window.is_visible()`.
+/// Estado propio de visibilidad: respaldo cuando la consulta de
+/// `window.is_visible()` falla. La fuente de verdad sigue siendo la ventana.
 static VISIBLE: AtomicBool = AtomicBool::new(false);
-static LAST_TOGGLE: Mutex<Option<Instant>> = Mutex::new(None);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -39,61 +35,20 @@ pub fn run() {
         })
         .setup(|app| {
             use tauri_plugin_dialog::DialogExt;
-            use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
             if let Some(window) = app.get_webview_window("main") {
                 VISIBLE.store(window.is_visible().unwrap_or(false), Ordering::SeqCst);
             }
 
-            // Atajo global Ctrl+Alt+K: alterna mostrar/ocultar el panel.
-            // Un error aquí (p. ej. atajo ya registrado por otra aplicación)
-            // NO debe abortar el arranque: el panel sigue siendo usable
-            // desde el icono de la bandeja.
-            if let Err(err) = app
-                .global_shortcut()
-                .on_shortcut("Ctrl+Alt+K", |app, _shortcut, event| {
-                    if event.state != ShortcutState::Pressed {
-                        return;
-                    }
-
-                    // Ignora repeticiones dentro de 250 ms
-                    {
-                        let mut last = LAST_TOGGLE.lock().unwrap();
-                        let now = Instant::now();
-                        if last.is_some_and(|t| now.duration_since(t) < Duration::from_millis(250)) {
-                            return;
-                        }
-                        *last = Some(now);
-                    }
-
-                    let Some(window) = app.get_webview_window("main") else {
-                        return;
-                    };
-
-                    // Fuente de verdad: visibilidad real de la ventana (cubre
-                    // los ocultados hechos desde el frontend). El estado propio
-                    // solo sirve como respaldo si la consulta falla.
-                    let currently_visible = window
-                        .is_visible()
-                        .unwrap_or_else(|_| VISIBLE.load(Ordering::SeqCst));
-                    if currently_visible {
-                        let _ = window.hide();
-                        VISIBLE.store(false, Ordering::SeqCst);
-                    } else {
-                        let _ = window.unminimize();
-                        let _ = window.show();
-                        let _ = window.set_focus();
-                        VISIBLE.store(true, Ordering::SeqCst);
-                    }
-                })
-            {
+            // Carga configuración y registra atajos configurables
+            if let Err(err) = commands::config::init(app.handle()) {
                 app.dialog()
-                    .message(format!(
-                        "No se pudo registrar el atajo Ctrl+Alt+K (puede que otra \
-                         aplicación lo esté usando): {err}\n\n\
-                         Koyun seguirá abierto: usa el icono de la bandeja para \
-                         mostrar u ocultar el panel."
-                    ))
+                    .message(format!("No se pudo cargar la configuración: {err}"))
+                    .title("Koyun")
+                    .show(|_| {});
+            } else if let Err(err) = commands::hotkeys::apply(app.handle()) {
+                app.dialog()
+                    .message(format!("No se pudieron registrar los atajos globales: {err}"))
                     .title("Koyun")
                     .show(|_| {});
             }
@@ -210,6 +165,14 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::config::config_get,
+            commands::config::config_set,
+            commands::theme::theme_system,
+            commands::hotkeys::hotkeys_list,
+            commands::hotkeys::hotkeys_apply,
+            commands::window::show_main_window,
+            commands::window::hide_main_window,
+            commands::window::toggle_main_window,
             commands::power::power_lock,
             commands::power::power_suspend,
             commands::power::power_restart,
@@ -219,6 +182,11 @@ pub fn run() {
             commands::audio::controls_volume_set_mute,
             commands::audio::audio_output_devices,
             commands::audio::audio_set_output_device,
+            commands::audio::audio_sessions,
+            commands::audio::audio_session_set_volume,
+            commands::audio::audio_session_set_mute,
+            commands::audio::audio_mic_state,
+            commands::audio::audio_mic_set_mute,
             commands::media::media_info,
             commands::media::media_action,
             commands::stats::stats_snapshot,
@@ -258,7 +226,9 @@ pub fn run() {
             commands::quick::quick_power_plans,
             commands::quick::quick_power_plan_set,
             commands::log::log_message,
-            commands::island::island_toggle_main
+            commands::island::island_toggle_main,
+            commands::notification::notification_list,
+            commands::notification::notification_open_settings
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

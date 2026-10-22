@@ -58,6 +58,11 @@ pub async fn power_lock() -> Result<(), String> {
     unsafe { LockWorkStation() }.map_err(|e| format!("LockWorkStation falló: {e}"))
 }
 
+/// Versión síncrona para usar desde atajos globales.
+pub fn power_lock_sync() -> Result<(), String> {
+    unsafe { LockWorkStation() }.map_err(|e| format!("LockWorkStation falló: {e}"))
+}
+
 #[tauri::command]
 pub async fn power_suspend() -> Result<(), String> {
     // bhibernate=false => suspender (sleep); no exige hiberfil

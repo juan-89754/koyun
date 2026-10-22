@@ -3,13 +3,17 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { TABS, type TabId } from "../lib/tabs";
 import { useUiStore } from "../store/ui";
 import { ControlsIcon, StatsIcon, ClipboardIcon, WallpaperIcon, PowerIcon, HideIcon } from "./icons";
+import { SlidersHorizontal, Bell, Settings } from "lucide-react";
 
-const TAB_ICONS: Record<TabId, typeof ControlsIcon> = {
+const TAB_ICONS: Record<TabId, any> = {
   controls: ControlsIcon,
+  mixer: SlidersHorizontal,
   stats: StatsIcon,
   clipboard: ClipboardIcon,
   wallpaper: WallpaperIcon,
+  notifications: Bell,
   power: PowerIcon,
+  settings: Settings,
 };
 
 interface TopBarProps {

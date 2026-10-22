@@ -523,6 +523,12 @@ pub async fn controls_dnd_set(on: bool) -> Result<(), String> {
     blocking(move || dnd_set(on)).await
 }
 
+/// Alterna «No molestar» desde un atajo global.
+pub fn dnd_toggle() -> Result<(), String> {
+    let current = dnd_get()?;
+    dnd_set(!current)
+}
+
 #[tauri::command]
 pub async fn controls_brightness_get() -> Result<Option<u8>, String> {
     blocking(brightness_get).await

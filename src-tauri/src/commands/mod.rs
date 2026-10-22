@@ -1,12 +1,17 @@
 pub mod audio;
 pub mod clipboard;
+pub mod config;
 pub mod controls;
+pub mod hotkeys;
 pub mod island;
 pub mod log;
 pub mod media;
+pub mod notification;
 pub mod power;
 pub mod quick;
 pub mod stats;
+pub mod theme;
 pub mod util;
 pub mod videowallpaper;
 pub mod wallpaper;
+pub mod window;

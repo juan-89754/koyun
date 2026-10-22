@@ -3,15 +3,17 @@ use windows::core::{GUID, IUnknown, Interface, PCWSTR};
 use windows::Win32::Devices::FunctionDiscovery::PKEY_Device_FriendlyName;
 use windows::Win32::Media::Audio::Endpoints::IAudioEndpointVolume;
 use windows::Win32::Media::Audio::{
-    IMMDevice, IMMDeviceCollection, IMMDeviceEnumerator, MMDeviceEnumerator, DEVICE_STATE_ACTIVE,
-    eCommunications, eConsole, eMultimedia, eRender,
+    eCapture, eCommunications, eConsole, eMultimedia, eRender, IAudioSessionControl2,
+    IAudioSessionManager2, IMMDevice, IMMDeviceCollection, IMMDeviceEnumerator,
+    ISimpleAudioVolume, MMDeviceEnumerator, DEVICE_STATE_ACTIVE,
 };
 use windows::Win32::System::Com::StructuredStorage::{PropVariantClear, PROPVARIANT};
-use windows::Win32::System::Com::{
-    CLSCTX_ALL, CoCreateInstance, CoTaskMemFree, STGM_READ,
+use windows::Win32::System::Com::{CLSCTX_ALL, CoCreateInstance, CoTaskMemFree, STGM_READ};
+use windows::Win32::System::Threading::{
+    OpenProcess, QueryFullProcessImageNameW, PROCESS_QUERY_LIMITED_INFORMATION,
 };
 
-use crate::commands::util::{ComGuard, blocking, propvariant_wstring};
+use crate::commands::util::{blocking, propvariant_wstring, ComGuard};
 
 #[derive(Serialize)]
 pub struct VolumeState {
@@ -26,7 +28,9 @@ pub struct AudioDevice {
     pub default: bool,
 }
 
-fn with_audio_endpoint<T>(f: impl FnOnce(&IAudioEndpointVolume) -> windows::core::Result<T>) -> windows::core::Result<T> {
+fn with_audio_endpoint<T>(
+    f: impl FnOnce(&IAudioEndpointVolume) -> windows::core::Result<T>,
+) -> windows::core::Result<T> {
     let _com = ComGuard::new();
     let enumerator: IMMDeviceEnumerator =
         unsafe { CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)? };
@@ -87,7 +91,7 @@ fn device_name(device: &IMMDevice) -> Option<String> {
         let store = device.OpenPropertyStore(STGM_READ).ok()?;
         let mut pv: PROPVARIANT = store.GetValue(&PKEY_Device_FriendlyName).ok()?;
         let name = propvariant_wstring(&pv);
-        let _ = PropVariantClear(&mut pv as *mut PROPVARIANT);
+        let _ = PropVariantClear(&mut pv);
         name
     }
 }
@@ -105,8 +109,9 @@ fn output_devices() -> Result<Vec<AudioDevice>, String> {
     let enumerator: IMMDeviceEnumerator =
         unsafe { CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL) }
             .map_err(|e| format!("Audio: {e}"))?;
-    let collection: IMMDeviceCollection = unsafe { enumerator.EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE) }
-        .map_err(|e| format!("Dispositivos de audio: {e}"))?;
+    let collection: IMMDeviceCollection =
+        unsafe { enumerator.EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE) }
+            .map_err(|e| format!("Dispositivos de audio: {e}"))?;
     let count = unsafe { collection.GetCount() }
         .map_err(|e| format!("Dispositivos de audio: {e}"))?;
     let default_id = default_output_id();
@@ -212,4 +217,231 @@ fn set_default_endpoint(id: &str) -> Result<(), String> {
 #[tauri::command]
 pub async fn audio_set_output_device(id: String) -> Result<(), String> {
     blocking(move || set_default_endpoint(&id)).await
+}
+
+// ---------------------------------------------------------------------------
+// Mezclador por aplicación
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize, Clone)]
+pub struct AudioSession {
+    pub pid: u32,
+    pub name: String,
+    pub process: String,
+    pub volume: f32,
+    pub muted: bool,
+}
+
+fn process_name(pid: u32) -> Option<String> {
+    if pid == 0 {
+        return None;
+    }
+    unsafe {
+        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
+        let mut buffer = [0u16; 260];
+        let mut size = buffer.len() as u32;
+        let ok = QueryFullProcessImageNameW(
+            handle,
+            windows::Win32::System::Threading::PROCESS_NAME_FORMAT(0),
+            windows::core::PWSTR(buffer.as_mut_ptr()),
+            &mut size,
+        )
+        .is_ok();
+        let _ = windows::Win32::Foundation::CloseHandle(handle);
+        if !ok {
+            return None;
+        }
+        let text = String::from_utf16_lossy(&buffer[..size as usize]);
+        let file = text.rsplit(['\\', '/']).next().unwrap_or_default();
+        let file = file.strip_suffix(".exe").unwrap_or(file);
+        if file.is_empty() {
+            None
+        } else {
+            Some(file.to_string())
+        }
+    }
+}
+
+fn session_manager() -> Result<IAudioSessionManager2, String> {
+    let _com = ComGuard::new();
+    let enumerator: IMMDeviceEnumerator =
+        unsafe { CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL) }
+            .map_err(|e| format!("Audio: {e}"))?;
+    let device: IMMDevice = unsafe { enumerator.GetDefaultAudioEndpoint(eRender, eConsole) }
+        .map_err(|e| format!("Dispositivo de salida: {e}"))?;
+    let manager: IAudioSessionManager2 = unsafe { device.Activate(CLSCTX_ALL, None) }
+        .map_err(|e| format!("Mezclador de audio: {e}"))?;
+    Ok(manager)
+}
+
+fn sessions_inner() -> Result<Vec<AudioSession>, String> {
+    let manager = session_manager()?;
+    let enumerator = unsafe { manager.GetSessionEnumerator() }
+        .map_err(|e| format!("Sesiones de audio: {e}"))?;
+    let count = unsafe { enumerator.GetCount() }.unwrap_or(0);
+
+    let mut out: Vec<AudioSession> = Vec::new();
+    for i in 0..count {
+        let Ok(control) = (unsafe { enumerator.GetSession(i) }) else {
+            continue;
+        };
+        let Ok(control2) = (control.cast::<IAudioSessionControl2>()) else {
+            continue;
+        };
+        let Ok(pid) = (unsafe { control2.GetProcessId() }) else {
+            continue;
+        };
+        if pid == 0 {
+            continue;
+        }
+        let Ok(volume) = (control.cast::<ISimpleAudioVolume>()) else {
+            continue;
+        };
+        let level = unsafe { volume.GetMasterVolume() }.unwrap_or(1.0);
+        let muted = unsafe { volume.GetMute() }
+            .map(|m| m.as_bool())
+            .unwrap_or(false);
+
+        let process = process_name(pid).unwrap_or_else(|| format!("Proceso {pid}"));
+        let name = unsafe { control.GetDisplayName() }
+            .ok()
+            .and_then(|p| {
+                let text = unsafe { p.to_string() }.ok();
+                unsafe { CoTaskMemFree(Some(p.0 as *const core::ffi::c_void)) };
+                text
+            })
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| process.clone());
+
+        out.push(AudioSession {
+            pid,
+            name,
+            process,
+            volume: level.clamp(0.0, 1.0),
+            muted,
+        });
+    }
+
+    out.sort_by(|a, b| {
+        a.process
+            .to_lowercase()
+            .cmp(&b.process.to_lowercase())
+            .then(a.pid.cmp(&b.pid))
+    });
+    out.dedup_by(|a, b| {
+        if a.process.eq_ignore_ascii_case(&b.process) {
+            b.volume = b.volume.max(a.volume);
+            b.muted = a.muted && b.muted;
+            true
+        } else {
+            false
+        }
+    });
+
+    Ok(out)
+}
+
+#[tauri::command]
+pub async fn audio_sessions() -> Result<Vec<AudioSession>, String> {
+    blocking(sessions_inner).await
+}
+
+fn find_session(pid: u32) -> Result<ISimpleAudioVolume, String> {
+    let manager = session_manager()?;
+    let enumerator = unsafe { manager.GetSessionEnumerator() }
+        .map_err(|e| format!("Sesiones de audio: {e}"))?;
+    let count = unsafe { enumerator.GetCount() }.unwrap_or(0);
+    for i in 0..count {
+        let Ok(control) = (unsafe { enumerator.GetSession(i) }) else {
+            continue;
+        };
+        let Ok(control2) = (control.cast::<IAudioSessionControl2>()) else {
+            continue;
+        };
+        if unsafe { control2.GetProcessId() }.ok() != Some(pid) {
+            continue;
+        }
+        if let Ok(volume) = control.cast::<ISimpleAudioVolume>() {
+            return Ok(volume);
+        }
+    }
+    Err("La aplicación ya no está reproduciendo sonido".to_string())
+}
+
+#[tauri::command]
+pub async fn audio_session_set_volume(pid: u32, level: f32) -> Result<(), String> {
+    let level = level.clamp(0.0, 1.0);
+    blocking(move || {
+        let volume = find_session(pid)?;
+        unsafe { volume.SetMasterVolume(level, std::ptr::null()) }
+            .map_err(|e| format!("Volumen de la aplicación: {e}"))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn audio_session_set_mute(pid: u32, muted: bool) -> Result<(), String> {
+    blocking(move || {
+        let volume = find_session(pid)?;
+        unsafe { volume.SetMute(muted, std::ptr::null()) }
+            .map_err(|e| format!("Silencio de la aplicación: {e}"))
+    })
+    .await
+}
+
+// ---------------------------------------------------------------------------
+// Entrada (Micrófono)
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize, Clone)]
+pub struct MicState {
+    pub muted: bool,
+    pub level: f32,
+    pub name: String,
+}
+
+fn input_endpoint() -> Result<(IAudioEndpointVolume, String), String> {
+    let _com = ComGuard::new();
+    let enumerator: IMMDeviceEnumerator =
+        unsafe { CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL) }
+            .map_err(|e| format!("Audio: {e}"))?;
+    let device: IMMDevice = unsafe { enumerator.GetDefaultAudioEndpoint(eCapture, eConsole) }
+        .map_err(|e| format!("Dispositivo de entrada: {e}"))?;
+    let name = device_name(&device).unwrap_or_else(|| "Micrófono".to_string());
+    let endpoint: IAudioEndpointVolume = unsafe { device.Activate(CLSCTX_ALL, None) }
+        .map_err(|e| format!("Micrófono: {e}"))?;
+    Ok((endpoint, name))
+}
+
+fn mic_state_inner() -> Result<MicState, String> {
+    let (endpoint, name) = input_endpoint()?;
+    let level = unsafe { endpoint.GetMasterVolumeLevelScalar() }.unwrap_or(0.0);
+    let muted = unsafe { endpoint.GetMute() }.map(|m| m.as_bool()).unwrap_or(false);
+    Ok(MicState { muted, level, name })
+}
+
+#[tauri::command]
+pub async fn audio_mic_state() -> Result<MicState, String> {
+    blocking(mic_state_inner).await
+}
+
+pub fn toggle_input_mute() -> Result<bool, String> {
+    let _com = ComGuard::new();
+    let (endpoint, _) = input_endpoint()?;
+    let muted = unsafe { endpoint.GetMute() }.map(|m| m.as_bool()).unwrap_or(false);
+    let nuevo = !muted;
+    unsafe { endpoint.SetMute(nuevo, std::ptr::null()) }
+        .map_err(|e| format!("Micrófono: {e}"))?;
+    Ok(nuevo)
+}
+
+#[tauri::command]
+pub async fn audio_mic_set_mute(muted: bool) -> Result<(), String> {
+    blocking(move || {
+        let _com = ComGuard::new();
+        let (endpoint, _) = input_endpoint()?;
+        unsafe { endpoint.SetMute(muted, std::ptr::null()) }
+            .map_err(|e| format!("Micrófono: {e}"))
+    })
+    .await
 }
